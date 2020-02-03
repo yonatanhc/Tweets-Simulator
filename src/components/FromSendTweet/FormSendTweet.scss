@@ -1,0 +1,25 @@
+.form-send-tweet{
+    background-color: #fff;
+    border: 2px solid #00acee;
+    padding: 20px;
+    width: 600px;
+
+    &_title{
+        margin:0 !important;
+    }
+
+    &_form{
+        .MuiFormControl-root{
+            width: 100%;
+        }
+
+        &-name{
+            width: 50% !important;
+        }
+
+        &-textarea{
+            width: 100%;
+        }
+    }
+
+}
