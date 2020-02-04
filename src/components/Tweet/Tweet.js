@@ -7,13 +7,13 @@ import moment from 'moment';
 import './Tweet.scss'
 
 export default function Tweets(props) {
-    const { tweet: { name, tweet, time }, index } = props;
+    const { tweet: { name, tweet, time }, index, deleteTweet } = props;
     return (
         <Card className="tweet">
             <CardContent>
                 <div className="tweet_header">
                     <h5>{name}</h5>
-                    <DeleteTwoToneIcon onClick={() => console.log("eliminado")} />
+                    <DeleteTwoToneIcon onClick={() => deleteTweet(index)} />
                 </div>
                 <p>{tweet}</p>
                 <div className="tweet_date-add-tweet">
