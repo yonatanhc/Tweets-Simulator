@@ -1,0 +1,36 @@
+package com.wu.crypto.dto;
+
+/**
+ * Valor único de entrada para /encrypt, /decrypt, /tokenize, /detokenize.
+ */
+public record ValueRequest(String value) {}
+
+
+package com.wu.crypto.dto;
+
+/**
+ * Valor único de salida para /encrypt, /decrypt, /tokenize, /detokenize.
+ */
+public record ValueResponse(String value) {}
+
+
+package com.wu.crypto.dto;
+
+import java.util.List;
+
+/**
+ * Lista de valores de entrada para /encrypt-batch, /decrypt-batch,
+ * /tokenize-batch, /detokenize-batch.
+ */
+public record BatchValueRequest(List<String> values) {}
+
+
+package com.wu.crypto.dto;
+
+import java.util.List;
+
+/**
+ * Lista de valores de salida para /encrypt-batch, /decrypt-batch,
+ * /tokenize-batch, /detokenize-batch.
+ */
+public record BatchValueResponse(List<String> values) {}
