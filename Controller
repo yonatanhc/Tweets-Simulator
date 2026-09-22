@@ -1,0 +1,105 @@
+package com.wu.crypto.controller;
+
+import com.wu.crypto.dto.BatchValueRequest;
+import com.wu.crypto.dto.BatchValueResponse;
+import com.wu.crypto.dto.ValueRequest;
+import com.wu.crypto.dto.ValueResponse;
+import com.wu.onep.library.gemalto.WUEncryptionHandlerImpl;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Wrapper HTTP sobre WUEncryptionHandlerImpl (era-encryption-utility).
+ *
+ * No contiene lógica de negocio: solo traduce peticiones REST a llamadas
+ * de la librería. Pensado para:
+ *  - Consumidores no-JVM (ej. Micro 0/Micro 1 en Node.js) que no pueden
+ *    instanciar la librería directamente.
+ *  - Pruebas manuales / verificación de valores ya encriptados en Redis,
+ *    logs o DB.
+ *
+ * Requiere que WUEncryptionHandlerImpl ya esté expuesto como @Bean
+ * (ver GemaltoConfig extends WUEncryptionConfig, definido aparte según
+ * la guía de onboarding de la librería).
+ *
+ * IMPORTANTE (seguridad):
+ *  - Nunca loguear el campo "value" de entrada ni de salida, ni en texto
+ *    plano ni cifrado.
+ *  - Este endpoint debe quedar detrás de autenticación (mTLS / API key /
+ *    JWT interno) antes de salir de un entorno de prueba local.
+ *  - Evaluar separar permisos de /decrypt y /detokenize del resto: son,
+ *    en la práctica, un oráculo de descifrado.
+ */
+@Slf4j
+@RestController
+@RequestMapping("/crypto")
+@RequiredArgsConstructor
+public class CryptoController {
+
+    private final WUEncryptionHandlerImpl wuEncryptionHandler;
+
+    @PostMapping("/encrypt")
+    public ValueResponse encrypt(@RequestBody ValueRequest request) {
+        log.debug("encrypt: request received");
+        return new ValueResponse(wuEncryptionHandler.encrypt(request.value()));
+    }
+
+    @PostMapping("/decrypt")
+    public ValueResponse decrypt(@RequestBody ValueRequest request) {
+        log.debug("decrypt: request received");
+        return new ValueResponse(wuEncryptionHandler.decrypt(request.value()));
+    }
+
+    @PostMapping("/encrypt-batch")
+    public BatchValueResponse encryptBatch(@RequestBody BatchValueRequest request) {
+        log.debug("encrypt-batch: {} values", request.values().size());
+        List<String> result = request.values().stream()
+                .map(wuEncryptionHandler::encrypt)
+                .collect(Collectors.toList());
+        return new BatchValueResponse(result);
+    }
+
+    @PostMapping("/decrypt-batch")
+    public BatchValueResponse decryptBatch(@RequestBody BatchValueRequest request) {
+        log.debug("decrypt-batch: {} values", request.values().size());
+        List<String> result = request.values().stream()
+                .map(wuEncryptionHandler::decrypt)
+                .collect(Collectors.toList());
+        return new BatchValueResponse(result);
+    }
+
+    @PostMapping("/tokenize")
+    public ValueResponse tokenize(@RequestBody ValueRequest request) {
+        log.debug("tokenize: request received");
+        return new ValueResponse(wuEncryptionHandler.tokenize(request.value()));
+    }
+
+    @PostMapping("/detokenize")
+    public ValueResponse detokenize(@RequestBody ValueRequest request) {
+        log.debug("detokenize: request received");
+        return new ValueResponse(wuEncryptionHandler.detokenize(request.value()));
+    }
+
+    @PostMapping("/tokenize-batch")
+    public BatchValueResponse tokenizeBatch(@RequestBody BatchValueRequest request) {
+        log.debug("tokenize-batch: {} values", request.values().size());
+        String[] input = request.values().toArray(new String[0]);
+        String[] tokens = wuEncryptionHandler.tokenize(input);
+        return new BatchValueResponse(List.of(tokens));
+    }
+
+    @PostMapping("/detokenize-batch")
+    public BatchValueResponse detokenizeBatch(@RequestBody BatchValueRequest request) {
+        log.debug("detokenize-batch: {} values", request.values().size());
+        String[] input = request.values().toArray(new String[0]);
+        String[] values = wuEncryptionHandler.detokenize(input);
+        return new BatchValueResponse(List.of(values));
+    }
+}
