@@ -1,0 +1,28 @@
+package com.wu.crypto.controller;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
+
+/**
+ * WUEncryptionHandlerImpl lanza RuntimeException ante fallos de
+ * encrypt/decrypt/tokenize/detokenize (ver logger.error en el sample
+ * de integración de la librería). Se captura acá para no filtrar el
+ * valor sensible en la respuesta ni en el log.
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, String>> handleCryptoError(RuntimeException ex) {
+        log.error("Crypto operation failed: {}", ex.getClass().getSimpleName());
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of("error", "crypto_operation_failed"));
+    }
+}
