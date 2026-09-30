@@ -1,0 +1,325 @@
+import { useState, useRef, useEffect } from 'react';
+import {
+  Drawer,
+  Button,
+  Upload,
+  Alert,
+  Progress,
+  List,
+  Typography,
+  Space,
+  Flex,
+  notification,
+} from 'antd';
+import {
+  InboxOutlined,
+  FileOutlined,
+  CheckOutlined,
+  ArrowLeftOutlined,
+  LoadingOutlined,
+} from '@ant-design/icons';
+
+const { Dragger } = Upload;
+const { Text } = Typography;
+
+// TODO: confirmar en Figma — el texto dice "Max 500 MG" (¿MB?) y los formatos del dropzone
+// (PDF, DOC, PPT, XLS) difieren de la descripción (XLS, CSV, PDF).
+const MAX_FILE_SIZE_MB = 500;
+const ACCEPTED_EXTENSIONS = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv';
+
+// Steps del flujo: 'select' → 'upload' → 'review'
+// status: 'idle' | 'ready' | 'uploading' | 'error' | 'completed'
+const TOTAL_STEPS = 4; // TODO: confirmar en Figma — la barra segmentada tiene 4 tramos
+
+const formatSize = (bytes = 0) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Barra segmentada (4 tramos) según estado
+const SegmentedProgress = ({ percent, status }) => {
+  const filled = Math.round((percent / 100) * TOTAL_STEPS);
+  const color =
+    status === 'error' ? '#ff4d4f' : status === 'completed' ? '#52c41a' : '#1677ff';
+  return (
+    <Flex align="center" gap={8}>
+      <Flex flex={1} gap={4}>
+        {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: 6,
+              borderRadius: 3,
+              background: i < filled || (status === 'error' && i < 2) ? color : '#d9d9d9',
+            }}
+          />
+        ))}
+      </Flex>
+      <Text type="secondary" style={{ minWidth: 36, textAlign: 'right' }}>
+        {status === 'error' ? '' : `${percent}%`}
+      </Text>
+    </Flex>
+  );
+};
+
+const UploadTaxesFormDrawer = ({ open, onClose, onSave }) => {
+  const [fileList, setFileList] = useState([]);
+  const [status, setStatus] = useState('idle');
+  const [percent, setPercent] = useState(0);
+  const [alertInfo, setAlertInfo] = useState(null); // { type, message }
+  const [api, contextHolder] = notification.useNotification();
+  const timerRef = useRef(null);
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  const reset = () => {
+    clearInterval(timerRef.current);
+    setFileList([]);
+    setStatus('idle');
+    setPercent(0);
+    setAlertInfo(null);
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose?.();
+  };
+
+  const beforeUpload = (file) => {
+    const tooBig = file.size / 1024 / 1024 > MAX_FILE_SIZE_MB;
+    if (tooBig) {
+      setFileList([file]);
+      setStatus('error');
+      setAlertInfo({
+        type: 'error',
+        message:
+          'The file you are trying to upload exceeds the maximum size limit. Please reduce the file size and try again.',
+      });
+      return Upload.LIST_IGNORE;
+    }
+    setFileList([file]); // Selected Files (1) — un solo archivo
+    setStatus('ready');
+    setPercent(0);
+    setAlertInfo({ type: 'info', message: 'Your files are ready for upload.' });
+    return false; // no upload automático; se sube al confirmar
+  };
+
+  const handleDelete = (file) => {
+    setFileList([]);
+    setStatus('idle');
+    setPercent(0);
+    setAlertInfo({
+      type: 'info',
+      message: `The file ${file.name} has been successfully deleted.`,
+    });
+  };
+
+  const handleConfirmUpload = () => {
+    setStatus('uploading');
+    setAlertInfo({ type: 'info', message: 'Your files are ready for upload.' });
+    setPercent(0);
+    // TODO: reemplazar por llamada real al API de upload (con onUploadProgress)
+    timerRef.current = setInterval(() => {
+      setPercent((prev) => {
+        const next = Math.min(prev + 25, 100);
+        if (next === 100) {
+          clearInterval(timerRef.current);
+          setStatus('completed');
+          setAlertInfo(null);
+          api.success({
+            message: 'Upload Complete',
+            description: 'The files have finished uploading and are ready to be saved.',
+            placement: 'topRight',
+          });
+        }
+        return next;
+      });
+    }, 600);
+  };
+
+  const handleBack = () => {
+    // TODO: confirmar en Figma — comportamiento de "Back" (volver a select desde review)
+    if (status === 'completed') {
+      setStatus('ready');
+      setPercent(0);
+      setAlertInfo({ type: 'info', message: 'Your files are ready for upload.' });
+    } else {
+      handleClose();
+    }
+  };
+
+  const handleSave = () => {
+    // TODO: llamada real para crear las tax rules (proceso irreversible)
+    onSave?.(fileList[0]);
+    handleClose();
+  };
+
+  const isUploading = status === 'uploading';
+  const isCompleted = status === 'completed';
+  const hasFile = fileList.length > 0;
+  const showDropzone = !isCompleted;
+  const showProgress = status !== 'idle' || alertInfo?.message?.includes('deleted');
+
+  return (
+    <>
+      {contextHolder}
+      <Drawer
+        open={open}
+        onClose={handleClose}
+        placement="right"
+        width={720} // TODO: confirmar ancho en Figma
+        closable={{ placement: 'start' }}
+        maskClosable={!isUploading}
+        title={
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>Upload Taxes Form</div>
+            <Text type="secondary" style={{ fontWeight: 400, fontSize: 14 }}>
+              Upload a file (XLS, CSV, or PDF) to create tax rules that apply to billers or
+              kiosks in a specific country and zone.
+            </Text>
+          </div>
+        }
+        footer={
+          <Space>
+            {isCompleted ? (
+              <Button
+                type="primary"
+                icon={<CheckOutlined />}
+                onClick={handleSave}
+                style={{ background: '#fadb14', color: '#000', borderColor: '#fadb14' }} // TODO: confirmar color CTA amarillo en Figma / tokens
+              >
+                Save
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                icon={isUploading ? <LoadingOutlined /> : <CheckOutlined />}
+                disabled={!hasFile || status === 'error' || isUploading}
+                loading={false}
+                onClick={handleConfirmUpload}
+                style={
+                  hasFile && status !== 'error'
+                    ? { background: '#fadb14', color: '#000', borderColor: '#fadb14' }
+                    : undefined
+                }
+              >
+                Confirm Upload
+              </Button>
+            )}
+            <Button icon={<ArrowLeftOutlined />} disabled={isUploading} onClick={handleBack}>
+              Back
+            </Button>
+          </Space>
+        }
+      >
+        <Flex vertical gap={16}>
+          {/* Barra de progreso segmentada (oculta en estado inicial vacío) */}
+          {showProgress && <SegmentedProgress percent={percent} status={status} />}
+
+          {/* Warning irreversible al completar */}
+          {isCompleted && (
+            <Alert
+              type="warning"
+              showIcon
+              message="This process cannot be undone. Double-check all information before proceeding."
+              description="Please be aware that once you save these tax forms, the process cannot be undone. Double-check all information before proceeding to save."
+            />
+          )}
+
+          {/* Alertas info / error */}
+          {alertInfo && !isCompleted && (
+            <Alert
+              type={alertInfo.type}
+              showIcon
+              closable
+              message={alertInfo.message}
+              onClose={() => setAlertInfo(null)}
+            />
+          )}
+
+          {/* Dropzone */}
+          {showDropzone && (
+            <div>
+              <Text strong>
+                <Text type="danger">* </Text>Upload Files
+              </Text>
+              <Dragger
+                accept={ACCEPTED_EXTENSIONS}
+                multiple={false}
+                showUploadList={false}
+                fileList={fileList}
+                beforeUpload={beforeUpload}
+                disabled={isUploading}
+                style={{
+                  marginTop: 8,
+                  borderColor: status === 'error' ? '#ff4d4f' : undefined,
+                }}
+              >
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined style={status === 'error' ? { color: '#ff4d4f' } : undefined} />
+                </p>
+                <p className="ant-upload-text">Click or drag file to this area to upload</p>
+                <p className="ant-upload-hint">
+                  Click to use the file browser or Drag and drop or{' '}
+                  <Text strong style={{ color: '#1677ff' }}>Choose file</Text> to upload
+                  <br />
+                  PDF, DOC, PPT, XLS (Max {MAX_FILE_SIZE_MB} MB)
+                </p>
+              </Dragger>
+            </div>
+          )}
+
+          {/* Selected Files */}
+          {(hasFile || isCompleted) && (
+            <div>
+              <Text strong>Selected Files ({fileList.length})</Text>
+              <List
+                style={{ marginTop: 8 }}
+                bordered
+                dataSource={fileList}
+                renderItem={(file) => (
+                  <List.Item
+                    actions={[
+                      <Button
+                        key="delete"
+                        type="link"
+                        danger
+                        disabled={isUploading || isCompleted || status === 'error'}
+                        onClick={() => handleDelete(file)}
+                      >
+                        Delete
+                      </Button>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      avatar={<FileOutlined style={{ fontSize: 20 }} />}
+                      title={file.name}
+                      description={formatSize(file.size)}
+                    />
+                  </List.Item>
+                )}
+              />
+            </div>
+          )}
+        </Flex>
+      </Drawer>
+    </>
+  );
+};
+
+// Demo de uso
+const UploadTaxesFormScreen = () => {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <Button type="primary" onClick={() => setOpen(true)}>
+        Upload Taxes Form
+      </Button>
+      <UploadTaxesFormDrawer open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+};
+
+export default UploadTaxesFormScreen;
